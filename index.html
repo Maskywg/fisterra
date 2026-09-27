@@ -250,6 +250,22 @@ footer b{font-family:var(--latin);letter-spacing:.2em;color:#ffd58a;font-size:17
 .rv.d1{transition-delay:.12s}.rv.d2{transition-delay:.24s}.rv.d3{transition-delay:.36s}
 @media(prefers-reduced-motion:reduce){.rv{opacity:1;transform:none;transition:none}.hero img.bg{animation:none;transform:none}html{scroll-behavior:auto}.cue::after,.tag i{animation:none}}
 
+/* music */
+#music{position:fixed;left:clamp(12px,2.4vw,24px);bottom:clamp(12px,2.4vw,24px);z-index:60;display:flex;align-items:center;gap:10px;padding:8px 16px 8px 8px;border:1px solid rgba(255,255,255,.55);border-radius:999px;background:rgba(34,48,60,.72);color:#fff;font:500 13.5px/1 var(--sans);letter-spacing:.06em;cursor:pointer;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 10px 28px -12px rgba(0,0,0,.6);transition:background .25s,transform .25s}
+#music:hover{background:rgba(34,48,60,.88);transform:translateY(-2px)}
+#music:focus-visible{outline:3px solid rgba(255,213,138,.7);outline-offset:3px}
+#music .ic{width:32px;height:32px;border-radius:50%;background:var(--gold);display:grid;place-items:center;flex:none}
+#music .ic svg{width:16px;height:16px;fill:#fff}
+#music .eq{display:flex;gap:2px;align-items:flex-end;height:14px}
+#music .eq i{width:3px;background:#ffd58a;border-radius:1px;height:4px;animation:eq 1s ease-in-out infinite}
+#music .eq i:nth-child(2){animation-delay:.2s}#music .eq i:nth-child(3){animation-delay:.4s}#music .eq i:nth-child(4){animation-delay:.6s}
+@keyframes eq{0%,100%{height:3px}50%{height:14px}}
+#music:not(.on) .eq i{animation:none;height:3px}
+#music.wait .ic{animation:ping2 1.8s infinite}
+@keyframes ping2{0%{box-shadow:0 0 0 0 rgba(201,138,46,.7)}80%,100%{box-shadow:0 0 0 12px rgba(201,138,46,0)}}
+@media(prefers-reduced-motion:reduce){#music .eq i,#music.wait .ic{animation:none}}
+@media(max-width:480px){#music .lb{display:none}#music{padding:6px}}
+
 /* lightbox */
 #lb{position:fixed;inset:0;z-index:100;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(14,18,28,.93);padding:24px 16px 20px}
 #lb.on{display:flex}
@@ -640,6 +656,14 @@ footer b{font-family:var(--latin);letter-spacing:.2em;color:#ffd58a;font-size:17
   <span style="opacity:.7;font-size:12.5px">照片上的短句與日記為顧老師原文；「旅途筆記」小卡為依她筆調補寫。</span>
 </footer>
 
+<!-- music -->
+<audio id="bgm" src="audio/serenidad-devotiva.mp3" loop preload="auto"></audio>
+<button id="music" type="button" aria-label="背景音樂：播放／暫停" aria-pressed="false">
+  <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="mIcon" d="M8 5v14l11-7z"/></svg></span>
+  <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+  <span class="lb" id="mLb">點一下播放音樂</span>
+</button>
+
 <!-- lightbox -->
 <div id="lb" role="dialog" aria-modal="true" aria-label="圖片檢視">
   <button class="x" aria-label="關閉">×</button>
@@ -746,6 +770,58 @@ footer b{font-family:var(--latin);letter-spacing:.2em;color:#ffd58a;font-size:17
     })(performance.now());
   });
   render(0);
+
+  /* ---- background music (autoplay, falling back to first user gesture) ---- */
+  var bgm=document.getElementById('bgm'), mb=document.getElementById('music'),
+      mIcon=document.getElementById('mIcon'), mLb=document.getElementById('mLb');
+  var PLAY='M8 5v14l11-7z', PAUSE='M6 5h4v14H6zm8 0h4v14h-4z', TARGET=0.4;
+  var userPaused=false, fadeT=null;
+  try{userPaused=localStorage.getItem('fisterra-bgm')==='off'}catch(e){}
+  bgm.volume=0;
+  function ui(on){
+    mb.classList.toggle('on',on); mb.classList.remove('wait');
+    mb.setAttribute('aria-pressed',on?'true':'false');
+    mIcon.setAttribute('d',on?PAUSE:PLAY); mLb.textContent=on?'音樂':'播放音樂';
+  }
+  function fade(to,ms,done){
+    clearInterval(fadeT); var from=bgm.volume, t0=performance.now();
+    fadeT=setInterval(function(){
+      var f=Math.min(1,(performance.now()-t0)/ms);
+      bgm.volume=Math.max(0,Math.min(1,from+(to-from)*f));
+      if(f>=1){clearInterval(fadeT); if(done)done()}
+    },50);
+  }
+  function start(){
+    var pr=bgm.play();
+    if(pr&&pr.then){pr.then(function(){ui(true);fade(TARGET,2500)}).catch(function(){waiting()})}
+    else{ui(true);fade(TARGET,2500)}
+  }
+  var gestures=['pointerdown','touchend','keydown','click'];
+  function onGesture(){ if(userPaused||!bgm.paused)return; start(); }
+  function waiting(){
+    mb.classList.add('wait'); mLb.textContent='點一下播放音樂';
+    gestures.forEach(function(g){document.addEventListener(g,firstGesture,{once:true,passive:true})});
+  }
+  function firstGesture(e){
+    gestures.forEach(function(g){document.removeEventListener(g,firstGesture)});
+    if(mb.contains(e.target))return;   /* button handles its own click */
+    onGesture();
+  }
+  mb.addEventListener('click',function(){
+    gestures.forEach(function(g){document.removeEventListener(g,firstGesture)});
+    if(bgm.paused){
+      userPaused=false; try{localStorage.setItem('fisterra-bgm','on')}catch(e){}
+      start();
+    }else{
+      userPaused=true; try{localStorage.setItem('fisterra-bgm','off')}catch(e){}
+      fade(0,600,function(){bgm.pause();ui(false)});
+    }
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ if(!bgm.paused)bgm.pause(); }
+    else if(!userPaused && mb.classList.contains('on')){ bgm.play().catch(function(){}) }
+  });
+  if(userPaused){ ui(false); mLb.textContent='播放音樂' } else { ui(false); start(); }
 })();
 </script>
 </body>
